@@ -7,9 +7,13 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/isanaID/mongo-redis-golang-gin/config"
+	"github.com/isanaID/mongo-redis-golang-gin/controllers"
+	"github.com/isanaID/mongo-redis-golang-gin/routes"
+	"github.com/isanaID/mongo-redis-golang-gin/services"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
@@ -20,6 +24,15 @@ var (
 	ctx         context.Context
 	mongoclient *mongo.Client
 	redisclient *redis.Client
+
+	userService         services.UserService
+	UserController      controllers.UserController
+	UserRouteController routes.UserRouteController
+
+	authCollection      *mongo.Collection
+	authService         services.AuthService
+	AuthController      controllers.AuthController
+	AuthRouteController routes.AuthRouteController
 )
 
 func init() {
@@ -63,6 +76,15 @@ func init() {
 
 	fmt.Println("Connected to Redis!")
 
+	authCollection = mongoclient.Database("golang_mongodb").Collection("users")
+	userService = services.NewUserServiceImpl(authCollection, ctx)
+	authService = services.NewAuthService(authCollection, ctx)
+	AuthController = controllers.NewAuthController(authService, userService)
+	AuthRouteController = routes.NewAuthRouteController(AuthController)
+
+	UserController = controllers.NewUserController(userService)
+	UserRouteController = routes.NewRouteUserController(UserController)
+
 	//create the gin engine instance
 	server = gin.Default()
 }
@@ -84,6 +106,12 @@ func main() {
 		panic(err)
 	}
 
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowOrigins = []string{"http://localhost:8000", "http://localhost:3000"}
+	corsConfig.AllowCredentials = true
+
+	server.Use(cors.New(corsConfig))
+
 	router := server.Group("/api")
 	router.GET("healthchecker", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{
@@ -92,5 +120,7 @@ func main() {
 		})
 	})
 
+	AuthRouteController.AuthRoute(router, userService)
+	UserRouteController.UserRoute(router, userService)
 	log.Fatal(server.Run(":" + config.Port))
 }
