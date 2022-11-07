@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/isanaID/mongo-redis-golang-gin/models"
@@ -23,6 +24,7 @@ func (us *UserServiceImpl) FindUserById(id string) (*models.DBResponse, error) {
 	oid, _ := primitive.ObjectIDFromHex(id)
 
 	var user *models.DBResponse
+
 	query := bson.M{"_id": oid}
 	err := us.collection.FindOne(us.ctx, query).Decode(&user)
 
@@ -32,11 +34,13 @@ func (us *UserServiceImpl) FindUserById(id string) (*models.DBResponse, error) {
 		}
 		return nil, err
 	}
+
 	return user, nil
 }
 
 func (us *UserServiceImpl) FindUserByEmail(email string) (*models.DBResponse, error) {
 	var user *models.DBResponse
+
 	query := bson.M{"email": strings.ToLower(email)}
 	err := us.collection.FindOne(us.ctx, query).Decode(&user)
 
@@ -46,5 +50,35 @@ func (us *UserServiceImpl) FindUserByEmail(email string) (*models.DBResponse, er
 		}
 		return nil, err
 	}
+
 	return user, nil
+}
+
+func (uc *UserServiceImpl) UpdateUserById(id string, field string, value string) (*models.DBResponse, error) {
+	userId, _ := primitive.ObjectIDFromHex(id)
+	query := bson.D{{Key: "_id", Value: userId}}
+	update := bson.D{{Key: "$set", Value: bson.D{{Key: field, Value: value}}}}
+	result, err := uc.collection.UpdateOne(uc.ctx, query, update)
+
+	fmt.Print(result.ModifiedCount)
+	if err != nil {
+		fmt.Print(err)
+		return &models.DBResponse{}, err
+	}
+
+	return &models.DBResponse{}, nil
+}
+
+func (uc *UserServiceImpl) UpdateOne(field string, value interface{}) (*models.DBResponse, error) {
+	query := bson.D{{Key: field, Value: value}}
+	update := bson.D{{Key: "$set", Value: bson.D{{Key: field, Value: value}}}}
+	result, err := uc.collection.UpdateOne(uc.ctx, query, update)
+
+	fmt.Print(result.ModifiedCount)
+	if err != nil {
+		fmt.Print(err)
+		return &models.DBResponse{}, err
+	}
+
+	return &models.DBResponse{}, nil
 }

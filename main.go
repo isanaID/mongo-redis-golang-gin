@@ -1,9 +1,9 @@
 package main
 
-//require package
 import (
 	"context"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 
@@ -33,22 +33,22 @@ var (
 	authService         services.AuthService
 	AuthController      controllers.AuthController
 	AuthRouteController routes.AuthRouteController
+
+	temp *template.Template
 )
 
 func init() {
-	//load env
+	// temp = template.Must(template.ParseGlob("templates/*.html"))
 	config, err := config.LoadConfig(".")
 	if err != nil {
-		log.Fatal("cannot load env", err)
+		log.Fatal("Could not load environment variables", err)
 	}
-
-	//create context
 
 	ctx = context.TODO()
 
-	//connect to mongo
+	// Connect to MongoDB
 	mongoconn := options.Client().ApplyURI(config.DBUri)
-	mongoclient, err = mongo.Connect(ctx, mongoconn)
+	mongoclient, err := mongo.Connect(ctx, mongoconn)
 
 	if err != nil {
 		panic(err)
@@ -58,9 +58,9 @@ func init() {
 		panic(err)
 	}
 
-	fmt.Println("Connected to MongoDB!")
+	fmt.Println("MongoDB successfully connected...")
 
-	//connect to redis
+	// Connect to Redis
 	redisclient = redis.NewClient(&redis.Options{
 		Addr: config.RedisUri,
 	})
@@ -69,23 +69,23 @@ func init() {
 		panic(err)
 	}
 
-	err = redisclient.Set(ctx, "test", "Welcome to golang with redis and mongodb", 0).Err()
+	err = redisclient.Set(ctx, "test", "Welcome to Golang with Redis and MongoDB", 0).Err()
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("Connected to Redis!")
+	fmt.Println("Redis client connected successfully...")
 
+	// Collections
 	authCollection = mongoclient.Database("golang_mongodb").Collection("users")
 	userService = services.NewUserServiceImpl(authCollection, ctx)
 	authService = services.NewAuthService(authCollection, ctx)
-	AuthController = controllers.NewAuthController(authService, userService)
+	AuthController = controllers.NewAuthController(authService, userService, ctx, authCollection)
 	AuthRouteController = routes.NewAuthRouteController(AuthController)
 
 	UserController = controllers.NewUserController(userService)
 	UserRouteController = routes.NewRouteUserController(UserController)
 
-	//create the gin engine instance
 	server = gin.Default()
 }
 
@@ -93,7 +93,7 @@ func main() {
 	config, err := config.LoadConfig(".")
 
 	if err != nil {
-		log.Fatal("cannot load env", err)
+		log.Fatal("Could not load config", err)
 	}
 
 	defer mongoclient.Disconnect(ctx)
@@ -101,23 +101,20 @@ func main() {
 	value, err := redisclient.Get(ctx, "test").Result()
 
 	if err == redis.Nil {
-		fmt.Println("key does not exist")
+		fmt.Println("key: test does not exist")
 	} else if err != nil {
 		panic(err)
 	}
 
 	corsConfig := cors.DefaultConfig()
-	corsConfig.AllowOrigins = []string{"http://localhost:8000", "http://localhost:3000"}
+	corsConfig.AllowOrigins = []string{config.Origin}
 	corsConfig.AllowCredentials = true
 
 	server.Use(cors.New(corsConfig))
 
 	router := server.Group("/api")
-	router.GET("healthchecker", func(ctx *gin.Context) {
-		ctx.JSON(http.StatusOK, gin.H{
-			"status":  "success",
-			"message": value,
-		})
+	router.GET("/healthchecker", func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"status": "success", "message": value})
 	})
 
 	AuthRouteController.AuthRoute(router, userService)
